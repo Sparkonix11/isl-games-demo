@@ -12,9 +12,9 @@
   min-height: 100vh;
   width: 100vw;
   height: 100vh;
-  background:
-    radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.7), transparent 45%),
-    linear-gradient(to bottom, #87ceeb 0%, #b0e0e6 100%);
+  background: 
+    url('/bg.png') center center / 100% auto no-repeat,
+    linear-gradient(to bottom, #87CEEB 0%, #B0E0E6 100%);
   overflow: hidden;
   position: relative;
   display: flex;
@@ -95,7 +95,7 @@
   bottom: 0%;
   width: 100%;
   height: 40%;
-  background: linear-gradient(to top, #3aa655 0%, #4dbb63 35%, transparent 100%);
+  background: url('/grass-train.png') center 60% / 100% 100% no-repeat;
   z-index: 1;
   pointer-events: none;
 }
@@ -145,10 +145,10 @@
 
 /* Hint Button */
 .train-game .hint-button {
-  position: fixed;
-  top: 1.5vh;
-  right: 1.5vw;
-  z-index: 250;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 50;
   background: transparent;
   border: none;
   padding: 0;
@@ -507,3 +507,136 @@
   }
 }
 
+/* Confetti effect on correct answer */
+.train-game .confetti-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.train-game .confetti {
+  position: absolute;
+  top: -20px;
+  opacity: 1;
+}
+
+.train-game .confetti::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: #FFD700;
+  border-radius: 50%;
+}
+
+/* Vary sizes */
+.train-game .confetti:nth-child(3n) { width: 10px; height: 10px; }
+.train-game .confetti:nth-child(3n+1) { width: 14px; height: 14px; }
+.train-game .confetti:nth-child(3n+2) { width: 8px; height: 8px; }
+.train-game .confetti:nth-child(5n) { width: 12px; height: 12px; }
+.train-game .confetti:nth-child(7n) { width: 16px; height: 16px; }
+
+/* Create different colored confetti pieces */
+.train-game .confetti:nth-child(3n)::before { background: #FF6B9D; }
+.train-game .confetti:nth-child(3n+1)::before { background: #4ECDC4; }
+.train-game .confetti:nth-child(3n+2)::before { background: #FFD700; }
+.train-game .confetti:nth-child(5n)::before { background: #FF8C42; }
+.train-game .confetti:nth-child(5n+1)::before { background: #8B5CF6; }
+.train-game .confetti:nth-child(7n)::before { background: #6BCF7F; }
+
+/* Make some confetti square */
+.train-game .confetti:nth-child(2n)::before { border-radius: 0; }
+
+/* Animate each confetti piece falling */
+@keyframes confetti-fall-1 {
+  0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) translateX(50px) rotate(720deg); opacity: 0; }
+}
+@keyframes confetti-fall-2 {
+  0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) translateX(-80px) rotate(-720deg); opacity: 0; }
+}
+@keyframes confetti-fall-3 {
+  0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) translateX(60px) rotate(720deg); opacity: 0; }
+}
+@keyframes confetti-fall-4 {
+  0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) translateX(-40px) rotate(-720deg); opacity: 0; }
+}
+@keyframes confetti-fall-5 {
+  0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) translateX(90px) rotate(720deg); opacity: 0; }
+}
+
+/* Generate unique animations for each confetti piece */
+.train-game .confetti {
+  animation: confetti-fall-1 3s linear forwards;
+}
+
+/* Assign different animations and positions to each confetti piece */
+.train-game .confetti-0 { left: 5%; animation: confetti-fall-1 3s linear 0s forwards; }
+.train-game .confetti-1 { left: 10%; animation: confetti-fall-2 3.2s linear 0.1s forwards; }
+.train-game .confetti-2 { left: 15%; animation: confetti-fall-3 2.8s linear 0.2s forwards; }
+.train-game .confetti-3 { left: 20%; animation: confetti-fall-4 3.1s linear 0.15s forwards; }
+.train-game .confetti-4 { left: 25%; animation: confetti-fall-5 2.9s linear 0.05s forwards; }
+.train-game .confetti-5 { left: 30%; animation: confetti-fall-1 3.3s linear 0.25s forwards; }
+.train-game .confetti-6 { left: 35%; animation: confetti-fall-2 2.7s linear 0.1s forwards; }
+.train-game .confetti-7 { left: 40%; animation: confetti-fall-3 3s linear 0.2s forwards; }
+.train-game .confetti-8 { left: 45%; animation: confetti-fall-4 2.8s linear 0.05s forwards; }
+.train-game .confetti-9 { left: 50%; animation: confetti-fall-5 3.2s linear 0.15s forwards; }
+.train-game .confetti-10 { left: 55%; animation: confetti-fall-1 2.9s linear 0.1s forwards; }
+.train-game .confetti-11 { left: 60%; animation: confetti-fall-2 3.1s linear 0.25s forwards; }
+.train-game .confetti-12 { left: 65%; animation: confetti-fall-3 2.8s linear 0.05s forwards; }
+.train-game .confetti-13 { left: 70%; animation: confetti-fall-4 3.3s linear 0.2s forwards; }
+.train-game .confetti-14 { left: 75%; animation: confetti-fall-5 2.7s linear 0.15s forwards; }
+.train-game .confetti-15 { left: 80%; animation: confetti-fall-1 3s linear 0.1s forwards; }
+.train-game .confetti-16 { left: 85%; animation: confetti-fall-2 2.9s linear 0.25s forwards; }
+.train-game .confetti-17 { left: 90%; animation: confetti-fall-3 3.2s linear 0.05s forwards; }
+.train-game .confetti-18 { left: 95%; animation: confetti-fall-4 2.8s linear 0.2s forwards; }
+.train-game .confetti-19 { left: 8%; animation: confetti-fall-5 3.1s linear 0.1s forwards; }
+.train-game .confetti-20 { left: 12%; animation: confetti-fall-1 2.7s linear 0.15s forwards; }
+.train-game .confetti-21 { left: 18%; animation: confetti-fall-2 3.3s linear 0.25s forwards; }
+.train-game .confetti-22 { left: 22%; animation: confetti-fall-3 2.9s linear 0.05s forwards; }
+.train-game .confetti-23 { left: 28%; animation: confetti-fall-4 3s linear 0.2s forwards; }
+.train-game .confetti-24 { left: 32%; animation: confetti-fall-5 2.8s linear 0.1s forwards; }
+.train-game .confetti-25 { left: 38%; animation: confetti-fall-1 3.2s linear 0.15s forwards; }
+.train-game .confetti-26 { left: 42%; animation: confetti-fall-2 2.7s linear 0.25s forwards; }
+.train-game .confetti-27 { left: 48%; animation: confetti-fall-3 3.1s linear 0.05s forwards; }
+.train-game .confetti-28 { left: 52%; animation: confetti-fall-4 2.9s linear 0.2s forwards; }
+.train-game .confetti-29 { left: 58%; animation: confetti-fall-5 3s linear 0.1s forwards; }
+.train-game .confetti-30 { left: 62%; animation: confetti-fall-1 2.8s linear 0.15s forwards; }
+.train-game .confetti-31 { left: 68%; animation: confetti-fall-2 3.3s linear 0.25s forwards; }
+.train-game .confetti-32 { left: 72%; animation: confetti-fall-3 2.7s linear 0.05s forwards; }
+.train-game .confetti-33 { left: 78%; animation: confetti-fall-4 3.2s linear 0.2s forwards; }
+.train-game .confetti-34 { left: 82%; animation: confetti-fall-5 2.9s linear 0.1s forwards; }
+.train-game .confetti-35 { left: 88%; animation: confetti-fall-1 3s linear 0.15s forwards; }
+.train-game .confetti-36 { left: 92%; animation: confetti-fall-2 2.8s linear 0.25s forwards; }
+.train-game .confetti-37 { left: 3%; animation: confetti-fall-3 3.3s linear 0.05s forwards; }
+.train-game .confetti-38 { left: 7%; animation: confetti-fall-4 2.7s linear 0.2s forwards; }
+.train-game .confetti-39 { left: 13%; animation: confetti-fall-5 3.1s linear 0.1s forwards; }
+.train-game .confetti-40 { left: 17%; animation: confetti-fall-1 2.9s linear 0.15s forwards; }
+.train-game .confetti-41 { left: 23%; animation: confetti-fall-2 3s linear 0.25s forwards; }
+.train-game .confetti-42 { left: 27%; animation: confetti-fall-3 2.8s linear 0.05s forwards; }
+.train-game .confetti-43 { left: 33%; animation: confetti-fall-4 3.2s linear 0.2s forwards; }
+.train-game .confetti-44 { left: 37%; animation: confetti-fall-5 2.7s linear 0.1s forwards; }
+.train-game .confetti-45 { left: 43%; animation: confetti-fall-1 3.1s linear 0.15s forwards; }
+.train-game .confetti-46 { left: 47%; animation: confetti-fall-2 2.9s linear 0.25s forwards; }
+.train-game .confetti-47 { left: 53%; animation: confetti-fall-3 3s linear 0.05s forwards; }
+.train-game .confetti-48 { left: 57%; animation: confetti-fall-4 2.8s linear 0.2s forwards; }
+.train-game .confetti-49 { left: 63%; animation: confetti-fall-5 3.3s linear 0.1s forwards; }
+.train-game .confetti-50 { left: 67%; animation: confetti-fall-1 2.7s linear 0.15s forwards; }
+.train-game .confetti-51 { left: 73%; animation: confetti-fall-2 3.2s linear 0.25s forwards; }
+.train-game .confetti-52 { left: 77%; animation: confetti-fall-3 2.9s linear 0.05s forwards; }
+.train-game .confetti-53 { left: 83%; animation: confetti-fall-4 3s linear 0.2s forwards; }
+.train-game .confetti-54 { left: 87%; animation: confetti-fall-5 2.8s linear 0.1s forwards; }
+.train-game .confetti-55 { left: 93%; animation: confetti-fall-1 3.3s linear 0.15s forwards; }
+.train-game .confetti-56 { left: 97%; animation: confetti-fall-2 2.7s linear 0.25s forwards; }
+.train-game .confetti-57 { left: 1%; animation: confetti-fall-3 3.1s linear 0.05s forwards; }
+.train-game .confetti-58 { left: 6%; animation: confetti-fall-4 2.9s linear 0.2s forwards; }
+.train-game .confetti-59 { left: 11%; animation: confetti-fall-5 3s linear 0.1s forwards; }
