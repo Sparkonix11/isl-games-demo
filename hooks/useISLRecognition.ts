@@ -27,6 +27,7 @@ interface Prediction {
 interface UseISLRecognitionOptions {
     onLetterConfirmed?: (letter: string) => void;
     enabled?: boolean;
+    targetLetter?: string; // Add target letter to reset state when it changes
 }
 
 interface UseISLRecognitionReturn {
@@ -41,6 +42,7 @@ interface UseISLRecognitionReturn {
 export function useISLRecognition({
     onLetterConfirmed,
     enabled = true,
+    targetLetter,
 }: UseISLRecognitionOptions = {}): UseISLRecognitionReturn {
     const webcamRef = useRef<Webcam>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -55,11 +57,22 @@ export function useISLRecognition({
     const holdCounter = useRef(0);
     const lastConfirmedLetter = useRef<string | null>(null);
     const enabledRef = useRef(enabled);
+    const lastWordRef = useRef<string | null>(null);
 
     // Keep enabled ref in sync
     useEffect(() => {
         enabledRef.current = enabled;
     }, [enabled]);
+
+    // Reset lastConfirmedLetter when target letter changes (new word)
+    useEffect(() => {
+        if (targetLetter && lastWordRef.current !== targetLetter) {
+            lastConfirmedLetter.current = null;
+            lastWordRef.current = targetLetter;
+            holdCounter.current = 0;
+            setHoldProgress(0);
+        }
+    }, [targetLetter]);
 
     const onResults = useCallback(async (results: any) => {
         if (!canvasRef.current || !webcamRef.current?.video) return;

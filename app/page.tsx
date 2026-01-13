@@ -161,7 +161,7 @@ export default function Home() {
         }
     }, [currentWord.targetLetter, fishLetters, fishPositions, isProcessing, showStartScreen, loadNextWord, playWrongSound]);
 
-    // ISL Recognition hook
+    // ISL Recognition hook - keep enabled even during processing to detect green state
     const {
         prediction,
         holdProgress,
@@ -171,8 +171,28 @@ export default function Home() {
         initMediaPipe,
     } = useISLRecognition({
         onLetterConfirmed: handleLetterInput,
-        enabled: !showStartScreen && !isProcessing,
+        enabled: !showStartScreen,
+        targetLetter: currentWord.targetLetter, // Pass target letter to reset state on word change
     });
+
+    // Watch for correct letter detection when it turns green (high confidence + high hold progress)
+    useEffect(() => {
+        if (!prediction || showStartScreen || isProcessing) return;
+        
+        // Check if the predicted letter matches the target and has high confidence
+        const isCorrect = prediction.label === currentWord.targetLetter;
+        const hasHighConfidence = prediction.score > 0.6;
+        
+        // If correct letter detected with high confidence and hold progress is high, trigger success
+        // This catches the "green" state in the camera
+        if (isCorrect && hasHighConfidence && holdProgress >= 80) {
+            // Find the matching fish
+            const matchingFishIndex = fishLetters.findIndex(l => l === prediction.label);
+            if (matchingFishIndex !== -1) {
+                handleLetterInput(prediction.label);
+            }
+        }
+    }, [prediction, holdProgress, currentWord.targetLetter, fishLetters, showStartScreen, isProcessing, handleLetterInput]);
 
     // Ensure target letter fish is always present
     useEffect(() => {
@@ -212,7 +232,7 @@ export default function Home() {
                     <AnimatePresence mode="popLayout">
                         {fishLetters.map((letter, index) => (
                             <Fish
-                                key={`${letter}-${index}-${currentWord.word}`}
+                                key={`${letter}-${index}-${currentWord.word}-${fishPositions[index]?.yPosition}`}
                                 letter={letter}
                                 isTarget={letter === currentWord.targetLetter}
                                 isJumping={letter === jumpingLetter}
