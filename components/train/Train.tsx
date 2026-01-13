@@ -94,19 +94,19 @@ export default function Train({
           <path d="M 105 310 L 460 310 L 463 320 L 87 320 Z" fill="#FFB74D" />
 
           {/* Wheels */}
-          <circle cx="150" cy="350" r="35" fill="#87CEEB" stroke="#1E3A5F" strokeWidth="5" className="rotating-wheel" />
+          <circle cx="150" cy="350" r="35" fill="#87CEEB" stroke="#1E3A5F" strokeWidth="5" />
           <circle cx="150" cy="350" r="22" fill="#FFFFFF" stroke="#1E3A5F" strokeWidth="4" />
           <circle cx="150" cy="350" r="10" fill="#87CEEB" />
 
-          <circle cx="240" cy="350" r="35" fill="#87CEEB" stroke="#1E3A5F" strokeWidth="5" className="rotating-wheel" />
+          <circle cx="240" cy="350" r="35" fill="#87CEEB" stroke="#1E3A5F" strokeWidth="5" />
           <circle cx="240" cy="350" r="22" fill="#FFFFFF" stroke="#1E3A5F" strokeWidth="4" />
           <circle cx="240" cy="350" r="10" fill="#87CEEB" />
 
-          <circle cx="340" cy="350" r="35" fill="#87CEEB" stroke="#1E3A5F" strokeWidth="5" className="rotating-wheel" />
+          <circle cx="340" cy="350" r="35" fill="#87CEEB" stroke="#1E3A5F" strokeWidth="5" />
           <circle cx="340" cy="350" r="22" fill="#FFFFFF" stroke="#1E3A5F" strokeWidth="4" />
           <circle cx="340" cy="350" r="10" fill="#87CEEB" />
 
-          <circle cx="420" cy="350" r="35" fill="#87CEEB" stroke="#1E3A5F" strokeWidth="5" className="rotating-wheel" />
+          <circle cx="420" cy="350" r="35" fill="#87CEEB" stroke="#1E3A5F" strokeWidth="5" />
           <circle cx="420" cy="350" r="22" fill="#FFFFFF" stroke="#1E3A5F" strokeWidth="4" />
           <circle cx="420" cy="350" r="10" fill="#87CEEB" />
         </svg>
