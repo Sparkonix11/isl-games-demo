@@ -49,7 +49,12 @@ export default function WebcamOverlay({
                 <Webcam
                     ref={webcamRef}
                     mirrored
-                    videoConstraints={{ width: 640, height: 480 }}
+                    audio={false}
+                    videoConstraints={{
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        frameRate: { ideal: 30, max: 30 },
+                    }}
                     style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                 />
                 <canvas

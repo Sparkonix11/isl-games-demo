@@ -8,6 +8,8 @@ const SMOOTHING_FACTOR = 0.7;
 const CONFIDENCE_THRESHOLD = 0.6;
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const HOLD_DURATION_FRAMES = 8;
+// Keep prediction calls bounded; serverless inference can be slow (cold starts on Vercel).
+const MIN_PREDICT_INTERVAL_MS = 175;
 
 declare global {
     interface Window {
@@ -55,13 +57,98 @@ export function useISLRecognition({
     const holdCounter = useRef(0);
     const lastConfirmedLetter = useRef<string | null>(null);
     const enabledRef = useRef(enabled);
+    const predictionSession = useRef(0);
+    const lastPredictAt = useRef(0);
+    const mountedRef = useRef(true);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+        };
+    }, []);
 
     // Keep enabled ref in sync
     useEffect(() => {
         enabledRef.current = enabled;
     }, [enabled]);
 
-    const onResults = useCallback(async (results: any) => {
+    const startPrediction = useCallback((sequence: number[][][], sessionAtStart: number) => {
+        isPredicting.current = true;
+        lastPredictAt.current = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+        fetch('/api/predict', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ landmarks: sequence }),
+        })
+            .then(async (res) => {
+                const data = await res.json();
+                if (!mountedRef.current) return;
+                if (sessionAtStart !== predictionSession.current) return; // hands disappeared/reset since request started
+
+                if (!data?.probabilities) return;
+                const probs = data.probabilities as number[];
+
+                if (!smoothedProbs.current) {
+                    smoothedProbs.current = probs;
+                } else {
+                    const alpha = SMOOTHING_FACTOR;
+                    smoothedProbs.current = smoothedProbs.current.map((p, i) =>
+                        alpha * p + (1.0 - alpha) * probs[i]
+                    );
+                }
+
+                const currentProbs = smoothedProbs.current;
+                const topIdx = currentProbs.reduce((maxIdx: number, currentVal: number, idx: number, arr: number[]) =>
+                    currentVal > arr[maxIdx] ? idx : maxIdx, 0
+                );
+
+                const predictedLabel = ALPHABET[topIdx];
+                const score = currentProbs[topIdx];
+
+                setPrediction({ label: predictedLabel, score });
+
+                // Only process game logic if enabled
+                if (enabledRef.current) {
+                    if (score > CONFIDENCE_THRESHOLD) {
+                        holdCounter.current += 1;
+                    } else {
+                        holdCounter.current = Math.max(0, holdCounter.current - 0.5);
+                    }
+
+                    holdCounter.current = Math.min(holdCounter.current, HOLD_DURATION_FRAMES + 2);
+                    const progress = Math.min(100, (holdCounter.current / HOLD_DURATION_FRAMES) * 100);
+                    setHoldProgress(progress);
+
+                    if (holdCounter.current >= HOLD_DURATION_FRAMES) {
+                        // Prevent rapid re-triggers of the same letter
+                        if (lastConfirmedLetter.current !== predictedLabel) {
+                            lastConfirmedLetter.current = predictedLabel;
+                            onLetterConfirmed?.(predictedLabel);
+
+                            // Reset after confirmation
+                            holdCounter.current = 0;
+                            setHoldProgress(0);
+
+                            // Allow same letter after a delay
+                            setTimeout(() => {
+                                lastConfirmedLetter.current = null;
+                            }, 2000);
+                        }
+                    }
+                }
+            })
+            .catch((e) => {
+                // Ignore fetch errors; keep camera loop running smoothly.
+                console.error("Inference Error:", e);
+            })
+            .finally(() => {
+                isPredicting.current = false;
+            });
+    }, [onLetterConfirmed]);
+
+    const onResults = useCallback((results: any) => {
         if (!canvasRef.current || !webcamRef.current?.video) return;
         const canvasCtx = canvasRef.current.getContext('2d')!;
 
@@ -107,84 +194,25 @@ export function useISLRecognition({
 
         const hasHands = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
         if (!hasHands) {
-            setPrediction(null);
+            // Bump session so any in-flight prediction result is ignored.
+            predictionSession.current += 1;
+            if (prediction !== null) setPrediction(null);
             smoothedProbs.current = null;
             holdCounter.current = 0;
-            setHoldProgress(0);
+            if (holdProgress !== 0) setHoldProgress(0);
             return;
         }
 
         if (landmarkBuffer.current.length === SEQ_LEN && !isPredicting.current) {
-            isPredicting.current = true;
-
-            try {
-                const res = await fetch('/api/predict', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ landmarks: landmarkBuffer.current }),
-                });
-
-                const data = await res.json();
-
-                if (data.probabilities) {
-                    const probs = data.probabilities as number[];
-
-                    if (!smoothedProbs.current) {
-                        smoothedProbs.current = probs;
-                    } else {
-                        const alpha = SMOOTHING_FACTOR;
-                        smoothedProbs.current = smoothedProbs.current.map((p, i) =>
-                            alpha * p + (1.0 - alpha) * probs[i]
-                        );
-                    }
-
-                    const currentProbs = smoothedProbs.current;
-                    const topIdx = currentProbs.reduce((maxIdx, currentVal, idx, arr) =>
-                        currentVal > arr[maxIdx] ? idx : maxIdx, 0
-                    );
-
-                    const predictedLabel = ALPHABET[topIdx];
-                    const score = currentProbs[topIdx];
-
-                    setPrediction({ label: predictedLabel, score });
-
-                    // Only process game logic if enabled
-                    if (enabledRef.current) {
-                        if (score > CONFIDENCE_THRESHOLD) {
-                            holdCounter.current += 1;
-                        } else {
-                            holdCounter.current = Math.max(0, holdCounter.current - 0.5);
-                        }
-
-                        holdCounter.current = Math.min(holdCounter.current, HOLD_DURATION_FRAMES + 2);
-                        const progress = Math.min(100, (holdCounter.current / HOLD_DURATION_FRAMES) * 100);
-                        setHoldProgress(progress);
-
-                        if (holdCounter.current >= HOLD_DURATION_FRAMES) {
-                            // Prevent rapid re-triggers of the same letter
-                            if (lastConfirmedLetter.current !== predictedLabel) {
-                                lastConfirmedLetter.current = predictedLabel;
-                                onLetterConfirmed?.(predictedLabel);
-
-                                // Reset after confirmation
-                                holdCounter.current = 0;
-                                setHoldProgress(0);
-
-                                // Allow same letter after a delay
-                                setTimeout(() => {
-                                    lastConfirmedLetter.current = null;
-                                }, 2000);
-                            }
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error("Inference Error:", e);
-            } finally {
-                isPredicting.current = false;
+            const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+            if (now - lastPredictAt.current >= MIN_PREDICT_INTERVAL_MS) {
+                const sessionAtStart = predictionSession.current;
+                // Shallow copy is safe because frames are immutable once pushed.
+                const sequence = landmarkBuffer.current.slice();
+                startPrediction(sequence, sessionAtStart);
             }
         }
-    }, [onLetterConfirmed]);
+    }, [holdProgress, prediction, startPrediction]);
 
     const initMediaPipe = useCallback(() => {
         if (typeof window !== 'undefined' && window.Hands && window.Camera && !isLoaded) {
