@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./train-game.css";
 
 export const metadata: Metadata = {
     title: "Alphabet Fishing - ISL Edition",
