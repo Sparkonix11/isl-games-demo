@@ -60,11 +60,18 @@ export function useISLRecognition({
     const predictionSession = useRef(0);
     const lastPredictAt = useRef(0);
     const mountedRef = useRef(true);
+    const isInitializing = useRef(false);
+    const initRetryTimeout = useRef<number | null>(null);
 
     useEffect(() => {
         mountedRef.current = true;
         return () => {
             mountedRef.current = false;
+            // Clean up retry timeout on unmount
+            if (initRetryTimeout.current) {
+                window.clearTimeout(initRetryTimeout.current);
+                initRetryTimeout.current = null;
+            }
         };
     }, []);
 
@@ -215,21 +222,35 @@ export function useISLRecognition({
     }, [holdProgress, prediction, startPrediction]);
 
     const initMediaPipe = useCallback(() => {
-        if (typeof window !== 'undefined' && window.Hands && window.Camera && !isLoaded) {
-            const hands = new window.Hands({
-                locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-            });
+        // Prevent multiple simultaneous initialization attempts
+        if (isLoaded || isInitializing.current) return;
+        if (typeof window === 'undefined' || !window.Hands || !window.Camera) return;
 
-            hands.setOptions({
-                maxNumHands: 2,
-                modelComplexity: 1,
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
+        // Clear any existing retry timeout
+        if (initRetryTimeout.current) {
+            window.clearTimeout(initRetryTimeout.current);
+            initRetryTimeout.current = null;
+        }
 
-            hands.onResults(onResults);
+        // Check if video is ready
+        if (webcamRef.current?.video && webcamRef.current.video.readyState >= 2) {
+            // Video is ready, initialize immediately
+            isInitializing.current = true;
+            
+            try {
+                const hands = new window.Hands({
+                    locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                });
 
-            if (webcamRef.current?.video) {
+                hands.setOptions({
+                    maxNumHands: 2,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                hands.onResults(onResults);
+
                 const camera = new window.Camera(webcamRef.current.video, {
                     onFrame: async () => {
                         if (webcamRef.current?.video) {
@@ -241,7 +262,66 @@ export function useISLRecognition({
                 });
                 camera.start();
                 setIsLoaded(true);
+                isInitializing.current = false;
+            } catch (error) {
+                console.error('MediaPipe initialization error:', error);
+                isInitializing.current = false;
             }
+        } else {
+            // Video not ready yet, retry
+            let attempt = 0;
+            const maxAttempts = 20;
+            
+            const tryInit = () => {
+                if (isLoaded || isInitializing.current) {
+                    if (initRetryTimeout.current) {
+                        window.clearTimeout(initRetryTimeout.current);
+                        initRetryTimeout.current = null;
+                    }
+                    return;
+                }
+                
+                if (webcamRef.current?.video && webcamRef.current.video.readyState >= 2) {
+                    // Video is ready now, initialize directly (don't call initMediaPipe to avoid recursion)
+                    isInitializing.current = true;
+                    
+                    try {
+                        const hands = new window.Hands({
+                            locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                        });
+
+                        hands.setOptions({
+                            maxNumHands: 2,
+                            modelComplexity: 1,
+                            minDetectionConfidence: 0.5,
+                            minTrackingConfidence: 0.5
+                        });
+
+                        hands.onResults(onResults);
+
+                        const camera = new window.Camera(webcamRef.current.video, {
+                            onFrame: async () => {
+                                if (webcamRef.current?.video) {
+                                    await hands.send({ image: webcamRef.current.video });
+                                }
+                            },
+                            width: 640,
+                            height: 480
+                        });
+                        camera.start();
+                        setIsLoaded(true);
+                        isInitializing.current = false;
+                    } catch (error) {
+                        console.error('MediaPipe initialization error:', error);
+                        isInitializing.current = false;
+                    }
+                } else if (attempt < maxAttempts) {
+                    attempt++;
+                    initRetryTimeout.current = window.setTimeout(tryInit, 100);
+                }
+            };
+            
+            initRetryTimeout.current = window.setTimeout(tryInit, 100);
         }
     }, [isLoaded, onResults]);
 

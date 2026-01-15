@@ -127,8 +127,8 @@ export default function TrainGame() {
       } else {
         // Wrong answer - shake (only if train is stopped)
         if (trainState === 'stopped') {
-          setIsProcessing(true);
-          setIsShaking(true);
+        setIsProcessing(true);
+        setIsShaking(true);
           setTimeout(() => {
             setIsShaking(false);
             setIsProcessing(false);
@@ -149,7 +149,7 @@ export default function TrainGame() {
   // Watch for correct letter detection when it turns green (high confidence + high hold progress)
   useEffect(() => {
     if (!prediction || trainState !== 'stopped' || gameState.isComplete || showHint) return;
-    
+
     // Check if the predicted letter matches the target and has high confidence
     const isCorrect = prediction.label === gameState.answer;
     const hasHighConfidence = prediction.score > 0.6;

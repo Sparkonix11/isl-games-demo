@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Script from 'next/script';
 import Webcam from 'react-webcam';
 
@@ -24,6 +24,20 @@ export default function WebcamOverlay({
     onScriptsLoad,
 }: WebcamOverlayProps) {
     const isCorrect = prediction?.label === targetLetter;
+    const [scriptsLoaded, setScriptsLoaded] = useState(0);
+
+    // Track when scripts are loaded
+    const handleScriptLoad = () => {
+        setScriptsLoaded((prev) => prev + 1);
+    };
+
+    // When all scripts are loaded AND video is ready, initialize MediaPipe
+    useEffect(() => {
+        if (scriptsLoaded >= 3 && !isLoaded) {
+            // All 3 scripts loaded, try to initialize (hook will handle retry if video not ready)
+            onScriptsLoad();
+        }
+    }, [scriptsLoaded, isLoaded, onScriptsLoad]);
 
     return (
         <>
@@ -31,17 +45,17 @@ export default function WebcamOverlay({
             <Script
                 src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
                 strategy="afterInteractive"
-                onLoad={onScriptsLoad}
+                onLoad={handleScriptLoad}
             />
             <Script
                 src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"
                 strategy="afterInteractive"
-                onLoad={onScriptsLoad}
+                onLoad={handleScriptLoad}
             />
             <Script
                 src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
                 strategy="afterInteractive"
-                onLoad={onScriptsLoad}
+                onLoad={handleScriptLoad}
             />
 
             {/* Webcam Overlay */}
@@ -88,13 +102,15 @@ export default function WebcamOverlay({
                     </div>
                 )}
 
-                {/* Hold Progress Bar */}
-                <div className="hold-progress">
-                    <div
-                        className="hold-progress-bar"
-                        style={{ width: `${holdProgress}%` }}
-                    />
-                </div>
+                {/* Hold Progress Bar - Only show for correct letter */}
+                {isCorrect && targetLetter && holdProgress > 0 && (
+                    <div className="hold-progress">
+                        <div
+                            className="hold-progress-bar"
+                            style={{ width: `${holdProgress}%` }}
+                        />
+                    </div>
+                )}
             </div>
         </>
     );
