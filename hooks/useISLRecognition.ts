@@ -62,18 +62,57 @@ export function useISLRecognition({
     const mountedRef = useRef(true);
     const isInitializing = useRef(false);
     const initRetryTimeout = useRef<number | null>(null);
+    const handsInstance = useRef<any>(null);
+    const cameraInstance = useRef<any>(null);
+
+    // Cleanup function to stop MediaPipe instances
+    const cleanupMediaPipe = useCallback(() => {
+        // Stop camera
+        if (cameraInstance.current) {
+            try {
+                cameraInstance.current.stop();
+            } catch (e) {
+                console.error('Error stopping camera:', e);
+            }
+            cameraInstance.current = null;
+        }
+
+        // Close hands instance
+        if (handsInstance.current) {
+            try {
+                handsInstance.current.close();
+            } catch (e) {
+                console.error('Error closing hands:', e);
+            }
+            handsInstance.current = null;
+        }
+
+        // Clear retry timeout
+        if (initRetryTimeout.current) {
+            window.clearTimeout(initRetryTimeout.current);
+            initRetryTimeout.current = null;
+        }
+
+        // Reset state
+        setIsLoaded(false);
+        isInitializing.current = false;
+        setPrediction(null);
+        setHoldProgress(0);
+        landmarkBuffer.current = [];
+        smoothedProbs.current = null;
+        holdCounter.current = 0;
+        lastConfirmedLetter.current = null;
+        predictionSession.current = 0;
+    }, []);
 
     useEffect(() => {
         mountedRef.current = true;
         return () => {
             mountedRef.current = false;
-            // Clean up retry timeout on unmount
-            if (initRetryTimeout.current) {
-                window.clearTimeout(initRetryTimeout.current);
-                initRetryTimeout.current = null;
-            }
+            // Clean up MediaPipe instances on unmount
+            cleanupMediaPipe();
         };
-    }, []);
+    }, [cleanupMediaPipe]);
 
     // Keep enabled ref in sync
     useEffect(() => {
@@ -221,9 +260,44 @@ export function useISLRecognition({
         }
     }, [holdProgress, prediction, startPrediction]);
 
-    const initMediaPipe = useCallback(() => {
+    // Helper function to create and start MediaPipe instances
+    const createMediaPipeInstances = useCallback(() => {
+        if (!webcamRef.current?.video) {
+            throw new Error('Video element not available');
+        }
+
+        const hands = new window.Hands({
+            locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onResults);
+        handsInstance.current = hands;
+
+        const camera = new window.Camera(webcamRef.current.video, {
+            onFrame: async () => {
+                if (webcamRef.current?.video && handsInstance.current) {
+                    await handsInstance.current.send({ image: webcamRef.current.video });
+                }
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+        cameraInstance.current = camera;
+        setIsLoaded(true);
+        isInitializing.current = false;
+    }, [onResults]);
+
+    const initMediaPipeInternal = useCallback(() => {
         // Prevent multiple simultaneous initialization attempts
-        if (isLoaded || isInitializing.current) return;
+        if (isInitializing.current) return;
         if (typeof window === 'undefined' || !window.Hands || !window.Camera) return;
 
         // Clear any existing retry timeout
@@ -238,34 +312,11 @@ export function useISLRecognition({
             isInitializing.current = true;
             
             try {
-                const hands = new window.Hands({
-                    locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-                });
-
-                hands.setOptions({
-                    maxNumHands: 2,
-                    modelComplexity: 1,
-                    minDetectionConfidence: 0.5,
-                    minTrackingConfidence: 0.5
-                });
-
-                hands.onResults(onResults);
-
-                const camera = new window.Camera(webcamRef.current.video, {
-                    onFrame: async () => {
-                        if (webcamRef.current?.video) {
-                            await hands.send({ image: webcamRef.current.video });
-                        }
-                    },
-                    width: 640,
-                    height: 480
-                });
-                camera.start();
-                setIsLoaded(true);
-                isInitializing.current = false;
+                createMediaPipeInstances();
             } catch (error) {
                 console.error('MediaPipe initialization error:', error);
                 isInitializing.current = false;
+                cleanupMediaPipe();
             }
         } else {
             // Video not ready yet, retry
@@ -273,7 +324,7 @@ export function useISLRecognition({
             const maxAttempts = 20;
             
             const tryInit = () => {
-                if (isLoaded || isInitializing.current) {
+                if (isInitializing.current) {
                     if (initRetryTimeout.current) {
                         window.clearTimeout(initRetryTimeout.current);
                         initRetryTimeout.current = null;
@@ -282,48 +333,45 @@ export function useISLRecognition({
                 }
                 
                 if (webcamRef.current?.video && webcamRef.current.video.readyState >= 2) {
-                    // Video is ready now, initialize directly (don't call initMediaPipe to avoid recursion)
+                    // Video is ready now, initialize directly
                     isInitializing.current = true;
                     
                     try {
-                        const hands = new window.Hands({
-                            locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-                        });
-
-                        hands.setOptions({
-                            maxNumHands: 2,
-                            modelComplexity: 1,
-                            minDetectionConfidence: 0.5,
-                            minTrackingConfidence: 0.5
-                        });
-
-                        hands.onResults(onResults);
-
-                        const camera = new window.Camera(webcamRef.current.video, {
-                            onFrame: async () => {
-                                if (webcamRef.current?.video) {
-                                    await hands.send({ image: webcamRef.current.video });
-                                }
-                            },
-                            width: 640,
-                            height: 480
-                        });
-                        camera.start();
-                        setIsLoaded(true);
-                        isInitializing.current = false;
+                        createMediaPipeInstances();
                     } catch (error) {
                         console.error('MediaPipe initialization error:', error);
                         isInitializing.current = false;
+                        cleanupMediaPipe();
                     }
                 } else if (attempt < maxAttempts) {
                     attempt++;
                     initRetryTimeout.current = window.setTimeout(tryInit, 100);
+                } else {
+                    // Max attempts reached, give up
+                    isInitializing.current = false;
                 }
             };
             
             initRetryTimeout.current = window.setTimeout(tryInit, 100);
         }
-    }, [isLoaded, onResults]);
+    }, [createMediaPipeInstances, cleanupMediaPipe]);
+
+    const initMediaPipe = useCallback(() => {
+        // Always clean up any existing instances before creating new ones
+        // This ensures a fresh start when switching games
+        if (handsInstance.current || cameraInstance.current) {
+            cleanupMediaPipe();
+            // Wait for cleanup to complete, then initialize
+            setTimeout(() => {
+                if (mountedRef.current) {
+                    initMediaPipeInternal();
+                }
+            }, 200);
+        } else {
+            // No existing instances, initialize directly
+            initMediaPipeInternal();
+        }
+    }, [cleanupMediaPipe, initMediaPipeInternal]);
 
     return {
         prediction,

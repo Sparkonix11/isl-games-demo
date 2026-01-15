@@ -12,6 +12,7 @@ interface WebcamOverlayProps {
     holdProgress: number;
     targetLetter?: string;
     onScriptsLoad: () => void;
+    showLoading?: boolean; // Control whether to show loading indicator
 }
 
 export default function WebcamOverlay({
@@ -22,6 +23,7 @@ export default function WebcamOverlay({
     holdProgress,
     targetLetter,
     onScriptsLoad,
+    showLoading = true, // Default to true for backward compatibility
 }: WebcamOverlayProps) {
     const isCorrect = prediction?.label === targetLetter;
     const [scriptsLoaded, setScriptsLoaded] = useState(0);
@@ -86,7 +88,7 @@ export default function WebcamOverlay({
                 />
 
                 {/* Loading indicator */}
-                {!isLoaded && (
+                {!isLoaded && showLoading && (
                     <div className="webcam-loading">
                         <p className="animate-pulse">LOADING...</p>
                     </div>
@@ -103,7 +105,7 @@ export default function WebcamOverlay({
                 )}
 
                 {/* Hold Progress Bar - Only show for correct letter */}
-                {isCorrect && targetLetter && holdProgress > 0 && (
+                {isCorrect && holdProgress > 0 && (
                     <div className="hold-progress">
                         <div
                             className="hold-progress-bar"

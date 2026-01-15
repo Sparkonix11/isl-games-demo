@@ -127,8 +127,8 @@ export default function TrainGame() {
       } else {
         // Wrong answer - shake (only if train is stopped)
         if (trainState === 'stopped') {
-        setIsProcessing(true);
-        setIsShaking(true);
+          setIsProcessing(true);
+          setIsShaking(true);
           setTimeout(() => {
             setIsShaking(false);
             setIsProcessing(false);
@@ -298,6 +298,7 @@ export default function TrainGame() {
           holdProgress={holdProgress}
           targetLetter={gameState.answer}
           onScriptsLoad={initMediaPipe}
+          showLoading={false}
         />
       </div>
     </div>

@@ -105,7 +105,7 @@ export default function FishingGame() {
   // Handle letter input (from ISL recognition)
   const handleLetterInput = useCallback(
     (letter: string) => {
-      if (isProcessing || showStartScreen) return;
+      if (showStartScreen) return;
 
       // Check if letter matches any fish
       const matchingFishIndex = fishLetters.findIndex((l) => l === letter);
@@ -115,14 +115,20 @@ export default function FishingGame() {
         return;
       }
 
+      const normalized = letter.trim().toUpperCase().slice(0, 1);
+      const isCorrectLetter = normalized === currentWord.targetLetter;
+
+      // Allow processing correct answer even during processing (for new word)
+      if (isProcessing && !isCorrectLetter) return;
+
       const screenCenterX = window.innerWidth / 2;
       const fishY = fishPositions[matchingFishIndex]?.yPosition || 50;
       const effectY = (fishY / 100) * window.innerHeight;
 
-      if (letter === currentWord.targetLetter) {
+      if (isCorrectLetter) {
         // Correct answer!
         setIsProcessing(true);
-        setJumpingLetter(letter);
+        setJumpingLetter(normalized);
 
         const fishX = screenCenterX + (fishPositions[matchingFishIndex]?.swimDirection || 1) * 100;
         setSparklePosition({ x: fishX, y: effectY });
@@ -145,7 +151,7 @@ export default function FishingGame() {
         setIsProcessing(true);
         playWrongSound();
         setShowWrongAnswer(true);
-        setWigglingLetter(letter);
+        setWigglingLetter(normalized);
         setBubblePosition({ x: screenCenterX, y: effectY });
         setShowBubbles(true);
 
@@ -165,6 +171,23 @@ export default function FishingGame() {
     onLetterConfirmed: handleLetterInput,
     enabled: !showStartScreen && !isProcessing,
   });
+
+  // Watch for correct letter detection when it turns green (high confidence + high hold progress)
+  // This allows detection to work even after the first letter
+  useEffect(() => {
+    if (!prediction || showStartScreen || isProcessing) return;
+
+    // Check if the predicted letter matches the target and has high confidence
+    const isCorrect = prediction.label === currentWord.targetLetter;
+    const hasHighConfidence = prediction.score > 0.6;
+    
+    // If correct letter detected with high confidence and hold progress is high, trigger success
+    // This catches the "green" state in the camera
+    // Allow correct answers even during processing (for new rounds)
+    if (isCorrect && hasHighConfidence && holdProgress >= 80) {
+      handleLetterInput(prediction.label);
+    }
+  }, [prediction, holdProgress, currentWord.targetLetter, showStartScreen, isProcessing, handleLetterInput]);
 
   // Ensure target letter fish is always present
   useEffect(() => {
@@ -232,6 +255,7 @@ export default function FishingGame() {
           holdProgress={holdProgress}
           targetLetter={currentWord.targetLetter}
           onScriptsLoad={initMediaPipe}
+          showLoading={false}
         />
       )}
     </div>

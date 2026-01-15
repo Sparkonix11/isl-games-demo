@@ -1,11 +1,37 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FishingGame from '@/components/FishingGame';
 import TrainGame from '@/components/train/TrainGame';
 
 export default function Home() {
     const [game, setGame] = useState<'menu' | 'fishing' | 'train'>('menu');
+    const [gameKey, setGameKey] = useState(0); // Key to force remount when switching games
+
+    // Handle back navigation with silent reload
+    const handleBack = () => {
+        // Set a flag to indicate we're going back
+        sessionStorage.setItem('gameNavigating', 'true');
+        // Force remount by changing key (this will trigger cleanup)
+        setGameKey(prev => prev + 1);
+        setGame('menu');
+        
+        // Silent reload after a brief delay to ensure cleanup completes
+        setTimeout(() => {
+            // Only reload if we're still on the menu (user didn't click another game)
+            if (sessionStorage.getItem('gameNavigating') === 'true') {
+                sessionStorage.removeItem('gameNavigating');
+                window.location.reload();
+            }
+        }, 200);
+    };
+
+    // Clear navigation flag when selecting a game
+    useEffect(() => {
+        if (game !== 'menu') {
+            sessionStorage.removeItem('gameNavigating');
+        }
+    }, [game]);
 
     if (game === 'menu') {
         return (
@@ -20,7 +46,10 @@ export default function Home() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <button
                             type="button"
-                            onClick={() => setGame('fishing')}
+                            onClick={() => {
+                                setGameKey(prev => prev + 1);
+                                setGame('fishing');
+                            }}
                             className="group text-left rounded-3xl p-6 bg-white/15 backdrop-blur border border-white/25 hover:bg-white/20 transition"
                         >
                             <div className="text-4xl mb-3">🐠</div>
@@ -34,7 +63,10 @@ export default function Home() {
 
                         <button
                             type="button"
-                            onClick={() => setGame('train')}
+                            onClick={() => {
+                                setGameKey(prev => prev + 1);
+                                setGame('train');
+                            }}
                             className="group text-left rounded-3xl p-6 bg-white/15 backdrop-blur border border-white/25 hover:bg-white/20 transition"
                         >
                             <div className="text-4xl mb-3">🚂</div>
@@ -57,14 +89,20 @@ export default function Home() {
 
     return (
         <>
-            {game === 'fishing' ? <FishingGame /> : <TrainGame />}
-            <button
-                type="button"
-                onClick={() => setGame('menu')}
-                className="fixed top-4 left-4 z-[400] px-4 py-2 rounded-full bg-black/40 text-white border border-white/20 backdrop-blur hover:bg-black/50 transition"
-            >
-                ← Back
-            </button>
+            {game === 'fishing' ? (
+                <FishingGame key={`fishing-${gameKey}`} />
+            ) : game === 'train' ? (
+                <TrainGame key={`train-${gameKey}`} />
+            ) : null}
+            {game !== 'menu' && (
+                <button
+                    type="button"
+                    onClick={handleBack}
+                    className="fixed top-4 left-4 z-[400] px-4 py-2 rounded-full bg-black/40 text-white border border-white/20 backdrop-blur hover:bg-black/50 transition"
+                >
+                    ← Back
+                </button>
+            )}
         </>
     );
 }
