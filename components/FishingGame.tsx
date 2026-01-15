@@ -107,22 +107,32 @@ export default function FishingGame() {
     (letter: string) => {
       if (showStartScreen) return;
 
-      // Check if letter matches any fish
-      const matchingFishIndex = fishLetters.findIndex((l) => l === letter);
-
-      if (matchingFishIndex === -1) {
-        // Letter doesn't match any fish on screen
-        return;
-      }
-
       const normalized = letter.trim().toUpperCase().slice(0, 1);
       const isCorrectLetter = normalized === currentWord.targetLetter;
 
       // Allow processing correct answer even during processing (for new word)
       if (isProcessing && !isCorrectLetter) return;
 
+      // For correct letters, always accept them (even if fish not visible)
+      // For wrong letters, only process if the fish is on screen
+      if (!isCorrectLetter) {
+        const matchingFishIndex = fishLetters.findIndex((l) => l === normalized);
+        if (matchingFishIndex === -1) {
+          // Wrong letter and fish not on screen - ignore
+          return;
+        }
+      }
+
+      // Find matching fish index (for correct letter, find the target fish)
+      const matchingFishIndex = isCorrectLetter
+        ? fishLetters.findIndex((l) => l === currentWord.targetLetter)
+        : fishLetters.findIndex((l) => l === normalized);
+
+      // If correct letter but fish not found, use default position
+      const fishIndex = matchingFishIndex !== -1 ? matchingFishIndex : 0;
+
       const screenCenterX = window.innerWidth / 2;
-      const fishY = fishPositions[matchingFishIndex]?.yPosition || 50;
+      const fishY = fishPositions[fishIndex]?.yPosition || 50;
       const effectY = (fishY / 100) * window.innerHeight;
 
       if (isCorrectLetter) {
@@ -130,7 +140,7 @@ export default function FishingGame() {
         setIsProcessing(true);
         setJumpingLetter(normalized);
 
-        const fishX = screenCenterX + (fishPositions[matchingFishIndex]?.swimDirection || 1) * 100;
+        const fishX = screenCenterX + (fishPositions[fishIndex]?.swimDirection || 1) * 100;
         setSparklePosition({ x: fishX, y: effectY });
         setShowSparkles(true);
 
@@ -171,23 +181,6 @@ export default function FishingGame() {
     onLetterConfirmed: handleLetterInput,
     enabled: !showStartScreen && !isProcessing,
   });
-
-  // Watch for correct letter detection when it turns green (high confidence + high hold progress)
-  // This allows detection to work even after the first letter
-  useEffect(() => {
-    if (!prediction || showStartScreen || isProcessing) return;
-
-    // Check if the predicted letter matches the target and has high confidence
-    const isCorrect = prediction.label === currentWord.targetLetter;
-    const hasHighConfidence = prediction.score > 0.6;
-    
-    // If correct letter detected with high confidence and hold progress is high, trigger success
-    // This catches the "green" state in the camera
-    // Allow correct answers even during processing (for new rounds)
-    if (isCorrect && hasHighConfidence && holdProgress >= 80) {
-      handleLetterInput(prediction.label);
-    }
-  }, [prediction, holdProgress, currentWord.targetLetter, showStartScreen, isProcessing, handleLetterInput]);
 
   // Ensure target letter fish is always present
   useEffect(() => {

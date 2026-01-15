@@ -362,11 +362,12 @@ export function useISLRecognition({
         if (handsInstance.current || cameraInstance.current) {
             cleanupMediaPipe();
             // Wait for cleanup to complete, then initialize
+            // Increased delay to ensure webcam is fully released
             setTimeout(() => {
-                if (mountedRef.current) {
+                if (mountedRef.current && !handsInstance.current && !cameraInstance.current) {
                     initMediaPipeInternal();
                 }
-            }, 200);
+            }, 300);
         } else {
             // No existing instances, initialize directly
             initMediaPipeInternal();

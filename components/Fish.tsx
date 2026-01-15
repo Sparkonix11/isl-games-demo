@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface FishProps {
@@ -38,12 +38,22 @@ export default function Fish({
         return images[Math.floor(Math.random() * images.length)];
     });
 
-    // Calculate starting position based on direction
-    // Fish SVG faces right by default (eye left, tail right)
-    // swimDirection > 0: facing right, swim left to right
-    // swimDirection < 0: facing left (flipped), swim right to left
-    const startX = swimDirection > 0 ? -150 : typeof window !== 'undefined' ? window.innerWidth + 150 : -150;
-    const endX = swimDirection > 0 ? (typeof window !== 'undefined' ? window.innerWidth + 150 : '100vw') : -150;
+    // Calculate starting position based on direction (client-side only to avoid hydration mismatch)
+    const [startX, setStartX] = useState(-150);
+    const [endX, setEndX] = useState<number | string>('100vw');
+
+    useEffect(() => {
+        // Fish SVG faces right by default (eye left, tail right)
+        // swimDirection > 0: facing right, swim left to right
+        // swimDirection < 0: facing left (flipped), swim right to left
+        if (swimDirection > 0) {
+            setStartX(-150);
+            setEndX(window.innerWidth + 150);
+        } else {
+            setStartX(window.innerWidth + 150);
+            setEndX(-150);
+        }
+    }, [swimDirection]);
 
     return (
         <AnimatePresence>
