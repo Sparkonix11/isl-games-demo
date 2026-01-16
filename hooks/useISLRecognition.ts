@@ -10,6 +10,8 @@ const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const HOLD_DURATION_FRAMES = 8;
 // Keep prediction calls bounded; serverless inference can be slow (cold starts on Vercel).
 const MIN_PREDICT_INTERVAL_MS = 175;
+const MAX_INIT_ATTEMPTS = 20;
+const INIT_RETRY_INTERVAL_MS = 100;
 
 declare global {
     interface Window {
@@ -38,6 +40,7 @@ interface UseISLRecognitionReturn {
     webcamRef: React.RefObject<Webcam | null>;
     canvasRef: React.RefObject<HTMLCanvasElement | null>;
     initMediaPipe: () => void;
+    onWebcamReady: () => void; // Callback to trigger initialization when webcam stream is ready
 }
 
 export function useISLRecognition({
@@ -64,6 +67,7 @@ export function useISLRecognition({
     const initRetryTimeout = useRef<number | null>(null);
     const handsInstance = useRef<any>(null);
     const cameraInstance = useRef<any>(null);
+    const needsReinitAfterCleanup = useRef(false);
 
     // Cleanup function to stop MediaPipe instances
     const cleanupMediaPipe = useCallback(() => {
@@ -335,7 +339,6 @@ export function useISLRecognition({
         } else {
             // Video not ready yet, retry
             let attempt = 0;
-            const maxAttempts = 20;
             
             const tryInit = () => {
                 if (isInitializing.current) {
@@ -358,16 +361,16 @@ export function useISLRecognition({
                         isInitializing.current = false;
                         cleanupMediaPipe();
                     }
-                } else if (attempt < maxAttempts) {
+                } else if (attempt < MAX_INIT_ATTEMPTS) {
                     attempt++;
-                    initRetryTimeout.current = window.setTimeout(tryInit, 100);
+                    initRetryTimeout.current = window.setTimeout(tryInit, INIT_RETRY_INTERVAL_MS);
                 } else {
                     // Max attempts reached, give up
                     isInitializing.current = false;
                 }
             };
             
-            initRetryTimeout.current = window.setTimeout(tryInit, 100);
+            initRetryTimeout.current = window.setTimeout(tryInit, INIT_RETRY_INTERVAL_MS);
         }
     }, [createMediaPipeInstances, cleanupMediaPipe]);
 
@@ -376,18 +379,30 @@ export function useISLRecognition({
         // This ensures a fresh start when switching games
         if (handsInstance.current || cameraInstance.current) {
             cleanupMediaPipe();
-            // Wait for cleanup to complete, then initialize
-            // Increased delay to ensure webcam is fully released
-            setTimeout(() => {
-                if (mountedRef.current && !handsInstance.current && !cameraInstance.current) {
-                    initMediaPipeInternal();
-                }
-            }, 300);
+            // Set flag to re-initialize when webcam is ready (via onWebcamReady)
+            needsReinitAfterCleanup.current = true;
         } else {
             // No existing instances, initialize directly
             initMediaPipeInternal();
         }
     }, [cleanupMediaPipe, initMediaPipeInternal]);
+
+    // Callback to trigger initialization when webcam stream is ready
+    const onWebcamReady = useCallback(() => {
+        // Only initialize if MediaPipe scripts are loaded
+        if (typeof window === 'undefined' || !window.Hands || !window.Camera) {
+            return;
+        }
+
+        // If we need to re-initialize after cleanup, do it now that webcam is ready
+        if (needsReinitAfterCleanup.current && mountedRef.current && !handsInstance.current && !cameraInstance.current) {
+            needsReinitAfterCleanup.current = false;
+            initMediaPipeInternal();
+        } else if (!handsInstance.current && !cameraInstance.current && !isInitializing.current) {
+            // Webcam is ready and no instances exist, initialize
+            initMediaPipeInternal();
+        }
+    }, [initMediaPipeInternal]);
 
     return {
         prediction,
@@ -396,5 +411,6 @@ export function useISLRecognition({
         webcamRef,
         canvasRef,
         initMediaPipe,
+        onWebcamReady,
     };
 }

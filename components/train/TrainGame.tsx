@@ -130,8 +130,8 @@ export default function TrainGame() {
       } else {
         // Wrong answer - shake (only if train is stopped)
         if (trainState === 'stopped') {
-        setIsProcessing(true);
-        setIsShaking(true);
+          setIsProcessing(true);
+          setIsShaking(true);
           setTimeout(() => {
             setIsShaking(false);
             setIsProcessing(false);
@@ -142,7 +142,7 @@ export default function TrainGame() {
     [gameState.answer, gameState.isComplete, handleCorrect, isProcessing, showHint, trainState]
   );
 
-  const { prediction, holdProgress, isLoaded, webcamRef, canvasRef, initMediaPipe } = useISLRecognition({
+  const { prediction, holdProgress, isLoaded, webcamRef, canvasRef, initMediaPipe, onWebcamReady } = useISLRecognition({
     onLetterConfirmed: (letter) => {
       handleLetterInput(letter);
     },
@@ -301,6 +301,7 @@ export default function TrainGame() {
           holdProgress={holdProgress}
           targetLetter={gameState.answer}
           onScriptsLoad={initMediaPipe}
+          onWebcamReady={onWebcamReady}
           showLoading={false}
           webcamKey={webcamInstanceKey}
         />

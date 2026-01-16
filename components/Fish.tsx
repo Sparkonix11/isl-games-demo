@@ -3,6 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// Fish image variants for random selection
+const FISH_IMAGES = [
+    '/fish-nemo.svg',
+    '/fish-nemo-blue.svg',
+    '/fish-nemo-green.svg',
+    '/fish-nemo-yellow.svg',
+];
+
 interface FishProps {
     letter: string;
     isTarget: boolean;
@@ -26,33 +34,35 @@ export default function Fish({
 }: FishProps) {
     const [swimDuration] = useState(() => 12 + Math.random() * 8);
     const [floatOffset] = useState(() => Math.random() * Math.PI * 2);
+    const [swimDelay] = useState(() => Math.random() * 3); // Random delay to stagger fish start times
     
-    // Randomly select between 4 fish types (25% each)
-    const [fishImage] = useState(() => {
-        const images = [
-            '/fish-nemo.svg',
-            '/fish-nemo-blue.svg',
-            '/fish-nemo-green.svg',
-            '/fish-nemo-yellow.svg',
-        ];
-        return images[Math.floor(Math.random() * images.length)];
-    });
+    // Randomly select between fish types (equal probability)
+    const [fishImage] = useState(() => FISH_IMAGES[Math.floor(Math.random() * FISH_IMAGES.length)]);
 
     // Calculate starting position based on direction (client-side only to avoid hydration mismatch)
     const [startX, setStartX] = useState(-150);
     const [endX, setEndX] = useState<number | string>('100vw');
 
     useEffect(() => {
-        // Fish SVG faces right by default (eye left, tail right)
-        // swimDirection > 0: facing right, swim left to right
-        // swimDirection < 0: facing left (flipped), swim right to left
-        if (swimDirection > 0) {
-            setStartX(-150);
-            setEndX(window.innerWidth + 150);
-        } else {
-            setStartX(window.innerWidth + 150);
-            setEndX(-150);
-        }
+        const updateBounds = () => {
+            // Fish SVG faces right by default (eye left, tail right)
+            // swimDirection > 0: facing right, swim left to right
+            // swimDirection < 0: facing left (flipped), swim right to left
+            if (swimDirection > 0) {
+                setStartX(-150);
+                setEndX(window.innerWidth + 150);
+            } else {
+                setStartX(window.innerWidth + 150);
+                setEndX(-150);
+            }
+        };
+
+        updateBounds();
+        window.addEventListener('resize', updateBounds);
+
+        return () => {
+            window.removeEventListener('resize', updateBounds);
+        };
     }, [swimDirection]);
 
     return (
@@ -84,6 +94,7 @@ export default function Fish({
                             duration: swimDuration,
                             repeat: Infinity,
                             ease: "linear",
+                            delay: swimDelay, // Random delay to stagger fish start times for natural effect
                         }
                 }
                 onAnimationComplete={() => {

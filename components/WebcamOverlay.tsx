@@ -12,6 +12,7 @@ interface WebcamOverlayProps {
     holdProgress: number;
     targetLetter?: string;
     onScriptsLoad: () => void;
+    onWebcamReady?: () => void; // Callback when webcam stream is ready
     showLoading?: boolean; // Control whether to show loading indicator
     webcamKey?: string | number; // Unique key for webcam element to force remount
 }
@@ -24,6 +25,7 @@ export default function WebcamOverlay({
     holdProgress,
     targetLetter,
     onScriptsLoad,
+    onWebcamReady, // Callback when webcam stream is ready
     showLoading = true, // Default to true for backward compatibility
     webcamKey, // Unique key for webcam element
 }: WebcamOverlayProps) {
@@ -44,13 +46,10 @@ export default function WebcamOverlay({
         if (webcamKey && webcamKey !== prevWebcamKeyRef.current && prevWebcamKeyRef.current !== undefined) {
             // Webcam key changed (switching games)
             prevWebcamKeyRef.current = webcamKey;
-            // Check if scripts are loaded, then trigger re-initialization
+            // Check if scripts are loaded
             if (typeof window !== 'undefined' && window.Hands && window.Camera && window.drawConnectors) {
-                // Scripts already loaded, trigger initialization after webcam is ready
-                const timer = setTimeout(() => {
-                    onScriptsLoad();
-                }, 300);
-                return () => clearTimeout(timer);
+                // Scripts already loaded, initialization will be triggered by onUserMedia callback
+                // when the webcam stream is ready (via onWebcamReady)
             } else {
                 // Scripts not loaded yet, wait for them
                 setScriptsLoaded(0);
@@ -58,7 +57,7 @@ export default function WebcamOverlay({
         } else if (!prevWebcamKeyRef.current && webcamKey) {
             prevWebcamKeyRef.current = webcamKey;
         }
-    }, [webcamKey, onScriptsLoad]);
+    }, [webcamKey]);
 
     // Track when scripts are loaded
     const handleScriptLoad = () => {
@@ -104,6 +103,7 @@ export default function WebcamOverlay({
                         height: { ideal: 480 },
                         frameRate: { ideal: 30, max: 30 },
                     }}
+                    onUserMedia={onWebcamReady}
                     style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                 />
                 <canvas
@@ -138,7 +138,7 @@ export default function WebcamOverlay({
                 )}
 
                 {/* Hold Progress Bar - Only show for correct letter */}
-                {isCorrect && holdProgress > 0 && (
+                {isCorrect && (
                     <div className="hold-progress">
                         <div
                             className="hold-progress-bar"

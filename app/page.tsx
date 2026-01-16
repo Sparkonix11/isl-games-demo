@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import FishingGame from '@/components/FishingGame';
 import TrainGame from '@/components/train/TrainGame';
 
@@ -8,24 +8,40 @@ export default function Home() {
     const [game, setGame] = useState<'menu' | 'fishing' | 'train'>('menu');
     const [gameKey, setGameKey] = useState(0); // Key to force remount when switching games
     const [isTransitioning, setIsTransitioning] = useState(false);
+    const pendingGameRef = useRef<'fishing' | 'train' | null>(null);
 
     // Handle back navigation
     const handleBack = () => {
         // Force remount by changing key (this will trigger cleanup)
         setGameKey(prev => prev + 1);
         setGame('menu');
+        pendingGameRef.current = null;
     };
 
-    // Handle game selection with transition delay
+    // Handle game selection - queue the transition
     const handleGameSelect = (selectedGame: 'fishing' | 'train') => {
         setIsTransitioning(true);
+        pendingGameRef.current = selectedGame;
+        // Force remount by changing key (this will trigger cleanup of previous game)
         setGameKey(prev => prev + 1);
-        // Small delay to ensure previous game cleanup completes
-        setTimeout(() => {
-            setGame(selectedGame);
-            setIsTransitioning(false);
-        }, 200);
     };
+
+    // Handle transition after previous component cleanup
+    useEffect(() => {
+        if (pendingGameRef.current && game === 'menu') {
+            // Use requestAnimationFrame to ensure transition happens after render cycle
+            // This allows React to complete the unmount/cleanup of the previous component
+            const rafId = requestAnimationFrame(() => {
+                // Use another RAF to ensure cleanup is complete
+                requestAnimationFrame(() => {
+                    setGame(pendingGameRef.current!);
+                    setIsTransitioning(false);
+                    pendingGameRef.current = null;
+                });
+            });
+            return () => cancelAnimationFrame(rafId);
+        }
+    }, [gameKey, game]);
 
     if (game === 'menu') {
         return (

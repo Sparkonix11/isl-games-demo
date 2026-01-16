@@ -14,6 +14,10 @@ import WebcamOverlay from '@/components/WebcamOverlay';
 import { useISLRecognition } from '@/hooks/useISLRecognition';
 import { WORDS, generateFishLetters, getRandomWord, type WordData } from '@/data/words';
 
+// Prediction thresholds for ISL recognition
+const PREDICTION_CONFIDENCE_THRESHOLD = 0.6;
+const HOLD_PROGRESS_THRESHOLD = 80;
+
 interface FishPosition {
   yPosition: number;
   swimDirection: number;
@@ -180,7 +184,7 @@ export default function FishingGame() {
   );
 
   // ISL Recognition hook
-  const { prediction, holdProgress, isLoaded, webcamRef, canvasRef, initMediaPipe } = useISLRecognition({
+  const { prediction, holdProgress, isLoaded, webcamRef, canvasRef, initMediaPipe, onWebcamReady } = useISLRecognition({
     onLetterConfirmed: handleLetterInput,
     enabled: !showStartScreen, // Always enabled when game is running, handleLetterInput will filter
   });
@@ -191,11 +195,11 @@ export default function FishingGame() {
 
     // Check if the predicted letter matches the target and has high confidence
     const isCorrect = prediction.label === currentWord.targetLetter;
-    const hasHighConfidence = prediction.score > 0.6;
+    const hasHighConfidence = prediction.score > PREDICTION_CONFIDENCE_THRESHOLD;
 
     // If correct letter detected with high confidence and hold progress is high, trigger success
     // This catches the "green" state in the camera and ensures continuous detection
-    if (isCorrect && hasHighConfidence && holdProgress >= 80) {
+    if (isCorrect && hasHighConfidence && holdProgress >= HOLD_PROGRESS_THRESHOLD) {
       handleLetterInput(prediction.label);
     }
   }, [prediction, holdProgress, currentWord.targetLetter, showStartScreen, isProcessing, handleLetterInput]);
@@ -266,6 +270,7 @@ export default function FishingGame() {
           holdProgress={holdProgress}
           targetLetter={currentWord.targetLetter}
           onScriptsLoad={initMediaPipe}
+          onWebcamReady={onWebcamReady}
           showLoading={false}
           webcamKey={webcamInstanceKey}
         />
