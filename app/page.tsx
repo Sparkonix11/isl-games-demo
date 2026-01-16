@@ -9,15 +9,11 @@ export default function Home() {
     const [gameKey, setGameKey] = useState(0); // Key to force remount when switching games
     const [isTransitioning, setIsTransitioning] = useState(false);
 
-    // Handle back navigation with reload
+    // Handle back navigation
     const handleBack = () => {
         // Force remount by changing key (this will trigger cleanup)
         setGameKey(prev => prev + 1);
         setGame('menu');
-        // Reload after a brief delay to ensure cleanup completes
-        setTimeout(() => {
-            window.location.reload();
-        }, 200);
     };
 
     // Handle game selection with transition delay

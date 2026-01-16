@@ -29,6 +29,9 @@ function generateFishPositions(count: number): FishPosition[] {
 }
 
 export default function FishingGame() {
+  // Unique key for webcam (changes on each mount)
+  const [webcamInstanceKey] = useState(() => `fishing-${Date.now()}-${Math.random()}`);
+  
   // Game state
   const [currentWord, setCurrentWord] = useState<WordData>(() => getRandomWord());
   const [fishLetters, setFishLetters] = useState<string[]>(() => generateFishLetters(currentWord.targetLetter, 7));
@@ -179,8 +182,23 @@ export default function FishingGame() {
   // ISL Recognition hook
   const { prediction, holdProgress, isLoaded, webcamRef, canvasRef, initMediaPipe } = useISLRecognition({
     onLetterConfirmed: handleLetterInput,
-    enabled: !showStartScreen && !isProcessing,
+    enabled: !showStartScreen, // Always enabled when game is running, handleLetterInput will filter
   });
+
+  // Watch for correct predictions with high confidence to catch continuous detection
+  useEffect(() => {
+    if (!prediction || showStartScreen || isProcessing) return;
+
+    // Check if the predicted letter matches the target and has high confidence
+    const isCorrect = prediction.label === currentWord.targetLetter;
+    const hasHighConfidence = prediction.score > 0.6;
+
+    // If correct letter detected with high confidence and hold progress is high, trigger success
+    // This catches the "green" state in the camera and ensures continuous detection
+    if (isCorrect && hasHighConfidence && holdProgress >= 80) {
+      handleLetterInput(prediction.label);
+    }
+  }, [prediction, holdProgress, currentWord.targetLetter, showStartScreen, isProcessing, handleLetterInput]);
 
   // Ensure target letter fish is always present
   useEffect(() => {
@@ -249,6 +267,7 @@ export default function FishingGame() {
           targetLetter={currentWord.targetLetter}
           onScriptsLoad={initMediaPipe}
           showLoading={false}
+          webcamKey={webcamInstanceKey}
         />
       )}
     </div>

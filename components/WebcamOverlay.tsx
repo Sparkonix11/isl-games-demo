@@ -13,6 +13,7 @@ interface WebcamOverlayProps {
     targetLetter?: string;
     onScriptsLoad: () => void;
     showLoading?: boolean; // Control whether to show loading indicator
+    webcamKey?: string | number; // Unique key for webcam element to force remount
 }
 
 export default function WebcamOverlay({
@@ -24,9 +25,40 @@ export default function WebcamOverlay({
     targetLetter,
     onScriptsLoad,
     showLoading = true, // Default to true for backward compatibility
+    webcamKey, // Unique key for webcam element
 }: WebcamOverlayProps) {
     const isCorrect = prediction?.label === targetLetter;
     const [scriptsLoaded, setScriptsLoaded] = useState(0);
+    const prevWebcamKeyRef = React.useRef<string | number | undefined>(webcamKey);
+    
+    // Check if scripts are already loaded (when switching games)
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.Hands && window.Camera && window.drawConnectors) {
+            // Scripts are already loaded from previous game
+            setScriptsLoaded(3);
+        }
+    }, []);
+
+    // Handle webcam key changes
+    useEffect(() => {
+        if (webcamKey && webcamKey !== prevWebcamKeyRef.current && prevWebcamKeyRef.current !== undefined) {
+            // Webcam key changed (switching games)
+            prevWebcamKeyRef.current = webcamKey;
+            // Check if scripts are loaded, then trigger re-initialization
+            if (typeof window !== 'undefined' && window.Hands && window.Camera && window.drawConnectors) {
+                // Scripts already loaded, trigger initialization after webcam is ready
+                const timer = setTimeout(() => {
+                    onScriptsLoad();
+                }, 300);
+                return () => clearTimeout(timer);
+            } else {
+                // Scripts not loaded yet, wait for them
+                setScriptsLoaded(0);
+            }
+        } else if (!prevWebcamKeyRef.current && webcamKey) {
+            prevWebcamKeyRef.current = webcamKey;
+        }
+    }, [webcamKey, onScriptsLoad]);
 
     // Track when scripts are loaded
     const handleScriptLoad = () => {
@@ -63,6 +95,7 @@ export default function WebcamOverlay({
             {/* Webcam Overlay */}
             <div className="webcam-overlay">
                 <Webcam
+                    key={webcamKey ? `webcam-${webcamKey}` : 'webcam-default'}
                     ref={webcamRef}
                     mirrored
                     audio={false}

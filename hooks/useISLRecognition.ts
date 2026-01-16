@@ -87,6 +87,19 @@ export function useISLRecognition({
             handsInstance.current = null;
         }
 
+        // Release webcam MediaStream
+        if (webcamRef.current?.video?.srcObject) {
+            try {
+                const stream = webcamRef.current.video.srcObject as MediaStream;
+                stream.getTracks().forEach(track => {
+                    track.stop();
+                });
+                webcamRef.current.video.srcObject = null;
+            } catch (e) {
+                console.error('Error releasing webcam stream:', e);
+            }
+        }
+
         // Clear retry timeout
         if (initRetryTimeout.current) {
             window.clearTimeout(initRetryTimeout.current);
@@ -306,8 +319,9 @@ export function useISLRecognition({
             initRetryTimeout.current = null;
         }
 
-        // Check if video is ready
-        if (webcamRef.current?.video && webcamRef.current.video.readyState >= 2) {
+        // Check if video is ready and stream is available
+        const video = webcamRef.current?.video;
+        if (video && video.readyState >= 2 && video.srcObject) {
             // Video is ready, initialize immediately
             isInitializing.current = true;
             
@@ -332,7 +346,8 @@ export function useISLRecognition({
                     return;
                 }
                 
-                if (webcamRef.current?.video && webcamRef.current.video.readyState >= 2) {
+                const video = webcamRef.current?.video;
+                if (video && video.readyState >= 2 && video.srcObject) {
                     // Video is ready now, initialize directly
                     isInitializing.current = true;
                     

@@ -14,6 +14,9 @@ function buildInitialRevealedSequence(round: TrainRound): Array<string | null> {
 }
 
 export default function TrainGame() {
+  // Unique key for webcam (changes on each mount)
+  const [webcamInstanceKey] = useState(() => `train-${Date.now()}-${Math.random()}`);
+  
   const [level, setLevel] = useState<GameLevel>(1); // 1 = sequential, 2 = random
   const [gameState, setGameState] = useState<TrainRound>(() => createNewRound(3, level));
   const [revealedSequence, setRevealedSequence] = useState<Array<string | null>>(() =>
@@ -127,8 +130,8 @@ export default function TrainGame() {
       } else {
         // Wrong answer - shake (only if train is stopped)
         if (trainState === 'stopped') {
-          setIsProcessing(true);
-          setIsShaking(true);
+        setIsProcessing(true);
+        setIsShaking(true);
           setTimeout(() => {
             setIsShaking(false);
             setIsProcessing(false);
@@ -299,6 +302,7 @@ export default function TrainGame() {
           targetLetter={gameState.answer}
           onScriptsLoad={initMediaPipe}
           showLoading={false}
+          webcamKey={webcamInstanceKey}
         />
       </div>
     </div>
