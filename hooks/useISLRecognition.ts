@@ -10,6 +10,8 @@ const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const HOLD_DURATION_FRAMES = 8;
 // Keep prediction calls bounded; serverless inference can be slow (cold starts on Vercel).
 const MIN_PREDICT_INTERVAL_MS = 175;
+const MAX_INIT_ATTEMPTS = 20;
+const INIT_RETRY_INTERVAL_MS = 100;
 
 declare global {
     interface Window {
@@ -38,6 +40,7 @@ interface UseISLRecognitionReturn {
     webcamRef: React.RefObject<Webcam | null>;
     canvasRef: React.RefObject<HTMLCanvasElement | null>;
     initMediaPipe: () => void;
+    onWebcamReady: () => void; // Callback to trigger initialization when webcam stream is ready
 }
 
 export function useISLRecognition({
@@ -60,13 +63,73 @@ export function useISLRecognition({
     const predictionSession = useRef(0);
     const lastPredictAt = useRef(0);
     const mountedRef = useRef(true);
+    const isInitializing = useRef(false);
+    const initRetryTimeout = useRef<number | null>(null);
+    const handsInstance = useRef<any>(null);
+    const cameraInstance = useRef<any>(null);
+    const needsReinitAfterCleanup = useRef(false);
+
+    // Cleanup function to stop MediaPipe instances
+    const cleanupMediaPipe = useCallback(() => {
+        // Stop camera
+        if (cameraInstance.current) {
+            try {
+                cameraInstance.current.stop();
+            } catch (e) {
+                console.error('Error stopping camera:', e);
+            }
+            cameraInstance.current = null;
+        }
+
+        // Close hands instance
+        if (handsInstance.current) {
+            try {
+                handsInstance.current.close();
+            } catch (e) {
+                console.error('Error closing hands:', e);
+            }
+            handsInstance.current = null;
+        }
+
+        // Release webcam MediaStream
+        if (webcamRef.current?.video?.srcObject) {
+            try {
+                const stream = webcamRef.current.video.srcObject as MediaStream;
+                stream.getTracks().forEach(track => {
+                    track.stop();
+                });
+                webcamRef.current.video.srcObject = null;
+            } catch (e) {
+                console.error('Error releasing webcam stream:', e);
+            }
+        }
+
+        // Clear retry timeout
+        if (initRetryTimeout.current) {
+            window.clearTimeout(initRetryTimeout.current);
+            initRetryTimeout.current = null;
+        }
+
+        // Reset state
+        setIsLoaded(false);
+        isInitializing.current = false;
+        setPrediction(null);
+        setHoldProgress(0);
+        landmarkBuffer.current = [];
+        smoothedProbs.current = null;
+        holdCounter.current = 0;
+        lastConfirmedLetter.current = null;
+        predictionSession.current = 0;
+    }, []);
 
     useEffect(() => {
         mountedRef.current = true;
         return () => {
             mountedRef.current = false;
+            // Clean up MediaPipe instances on unmount
+            cleanupMediaPipe();
         };
-    }, []);
+    }, [cleanupMediaPipe]);
 
     // Keep enabled ref in sync
     useEffect(() => {
@@ -214,36 +277,132 @@ export function useISLRecognition({
         }
     }, [holdProgress, prediction, startPrediction]);
 
-    const initMediaPipe = useCallback(() => {
-        if (typeof window !== 'undefined' && window.Hands && window.Camera && !isLoaded) {
-            const hands = new window.Hands({
-                locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-            });
-
-            hands.setOptions({
-                maxNumHands: 2,
-                modelComplexity: 1,
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
-
-            hands.onResults(onResults);
-
-            if (webcamRef.current?.video) {
-                const camera = new window.Camera(webcamRef.current.video, {
-                    onFrame: async () => {
-                        if (webcamRef.current?.video) {
-                            await hands.send({ image: webcamRef.current.video });
-                        }
-                    },
-                    width: 640,
-                    height: 480
-                });
-                camera.start();
-                setIsLoaded(true);
-            }
+    // Helper function to create and start MediaPipe instances
+    const createMediaPipeInstances = useCallback(() => {
+        if (!webcamRef.current?.video) {
+            throw new Error('Video element not available');
         }
-    }, [isLoaded, onResults]);
+
+        const hands = new window.Hands({
+            locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onResults);
+        handsInstance.current = hands;
+
+        const camera = new window.Camera(webcamRef.current.video, {
+            onFrame: async () => {
+                if (webcamRef.current?.video && handsInstance.current) {
+                    await handsInstance.current.send({ image: webcamRef.current.video });
+                }
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+        cameraInstance.current = camera;
+        setIsLoaded(true);
+        isInitializing.current = false;
+    }, [onResults]);
+
+    const initMediaPipeInternal = useCallback(() => {
+        // Prevent multiple simultaneous initialization attempts
+        if (isInitializing.current) return;
+        if (typeof window === 'undefined' || !window.Hands || !window.Camera) return;
+
+        // Clear any existing retry timeout
+        if (initRetryTimeout.current) {
+            window.clearTimeout(initRetryTimeout.current);
+            initRetryTimeout.current = null;
+        }
+
+        // Check if video is ready and stream is available
+        const video = webcamRef.current?.video;
+        if (video && video.readyState >= 2 && video.srcObject) {
+            // Video is ready, initialize immediately
+            isInitializing.current = true;
+            
+            try {
+                createMediaPipeInstances();
+            } catch (error) {
+                console.error('MediaPipe initialization error:', error);
+                isInitializing.current = false;
+                cleanupMediaPipe();
+            }
+        } else {
+            // Video not ready yet, retry
+            let attempt = 0;
+            
+            const tryInit = () => {
+                if (isInitializing.current) {
+                    if (initRetryTimeout.current) {
+                        window.clearTimeout(initRetryTimeout.current);
+                        initRetryTimeout.current = null;
+                    }
+                    return;
+                }
+                
+                const video = webcamRef.current?.video;
+                if (video && video.readyState >= 2 && video.srcObject) {
+                    // Video is ready now, initialize directly
+                    isInitializing.current = true;
+                    
+                    try {
+                        createMediaPipeInstances();
+                    } catch (error) {
+                        console.error('MediaPipe initialization error:', error);
+                        isInitializing.current = false;
+                        cleanupMediaPipe();
+                    }
+                } else if (attempt < MAX_INIT_ATTEMPTS) {
+                    attempt++;
+                    initRetryTimeout.current = window.setTimeout(tryInit, INIT_RETRY_INTERVAL_MS);
+                } else {
+                    // Max attempts reached, give up
+                    isInitializing.current = false;
+                }
+            };
+            
+            initRetryTimeout.current = window.setTimeout(tryInit, INIT_RETRY_INTERVAL_MS);
+        }
+    }, [createMediaPipeInstances, cleanupMediaPipe]);
+
+    const initMediaPipe = useCallback(() => {
+        // Always clean up any existing instances before creating new ones
+        // This ensures a fresh start when switching games
+        if (handsInstance.current || cameraInstance.current) {
+            cleanupMediaPipe();
+            // Set flag to re-initialize when webcam is ready (via onWebcamReady)
+            needsReinitAfterCleanup.current = true;
+        } else {
+            // No existing instances, initialize directly
+            initMediaPipeInternal();
+        }
+    }, [cleanupMediaPipe, initMediaPipeInternal]);
+
+    // Callback to trigger initialization when webcam stream is ready
+    const onWebcamReady = useCallback(() => {
+        // Only initialize if MediaPipe scripts are loaded
+        if (typeof window === 'undefined' || !window.Hands || !window.Camera) {
+            return;
+        }
+
+        // If we need to re-initialize after cleanup, do it now that webcam is ready
+        if (needsReinitAfterCleanup.current && mountedRef.current && !handsInstance.current && !cameraInstance.current) {
+            needsReinitAfterCleanup.current = false;
+            initMediaPipeInternal();
+        } else if (!handsInstance.current && !cameraInstance.current && !isInitializing.current) {
+            // Webcam is ready and no instances exist, initialize
+            initMediaPipeInternal();
+        }
+    }, [initMediaPipeInternal]);
 
     return {
         prediction,
@@ -252,5 +411,6 @@ export function useISLRecognition({
         webcamRef,
         canvasRef,
         initMediaPipe,
+        onWebcamReady,
     };
 }

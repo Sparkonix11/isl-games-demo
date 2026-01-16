@@ -14,6 +14,9 @@ function buildInitialRevealedSequence(round: TrainRound): Array<string | null> {
 }
 
 export default function TrainGame() {
+  // Unique key for webcam (changes on each mount)
+  const [webcamInstanceKey] = useState(() => `train-${Date.now()}-${Math.random()}`);
+  
   const [level, setLevel] = useState<GameLevel>(1); // 1 = sequential, 2 = random
   const [gameState, setGameState] = useState<TrainRound>(() => createNewRound(3, level));
   const [revealedSequence, setRevealedSequence] = useState<Array<string | null>>(() =>
@@ -139,7 +142,7 @@ export default function TrainGame() {
     [gameState.answer, gameState.isComplete, handleCorrect, isProcessing, showHint, trainState]
   );
 
-  const { prediction, holdProgress, isLoaded, webcamRef, canvasRef, initMediaPipe } = useISLRecognition({
+  const { prediction, holdProgress, isLoaded, webcamRef, canvasRef, initMediaPipe, onWebcamReady } = useISLRecognition({
     onLetterConfirmed: (letter) => {
       handleLetterInput(letter);
     },
@@ -149,7 +152,7 @@ export default function TrainGame() {
   // Watch for correct letter detection when it turns green (high confidence + high hold progress)
   useEffect(() => {
     if (!prediction || trainState !== 'stopped' || gameState.isComplete || showHint) return;
-    
+
     // Check if the predicted letter matches the target and has high confidence
     const isCorrect = prediction.label === gameState.answer;
     const hasHighConfidence = prediction.score > 0.6;
@@ -298,6 +301,9 @@ export default function TrainGame() {
           holdProgress={holdProgress}
           targetLetter={gameState.answer}
           onScriptsLoad={initMediaPipe}
+          onWebcamReady={onWebcamReady}
+          showLoading={false}
+          webcamKey={webcamInstanceKey}
         />
       </div>
     </div>

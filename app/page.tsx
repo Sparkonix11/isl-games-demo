@@ -1,11 +1,47 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import FishingGame from '@/components/FishingGame';
 import TrainGame from '@/components/train/TrainGame';
 
 export default function Home() {
     const [game, setGame] = useState<'menu' | 'fishing' | 'train'>('menu');
+    const [gameKey, setGameKey] = useState(0); // Key to force remount when switching games
+    const [isTransitioning, setIsTransitioning] = useState(false);
+    const pendingGameRef = useRef<'fishing' | 'train' | null>(null);
+
+    // Handle back navigation
+    const handleBack = () => {
+        // Force remount by changing key (this will trigger cleanup)
+        setGameKey(prev => prev + 1);
+        setGame('menu');
+        pendingGameRef.current = null;
+    };
+
+    // Handle game selection - queue the transition
+    const handleGameSelect = (selectedGame: 'fishing' | 'train') => {
+        setIsTransitioning(true);
+        pendingGameRef.current = selectedGame;
+        // Force remount by changing key (this will trigger cleanup of previous game)
+        setGameKey(prev => prev + 1);
+    };
+
+    // Handle transition after previous component cleanup
+    useEffect(() => {
+        if (pendingGameRef.current && game === 'menu') {
+            // Use requestAnimationFrame to ensure transition happens after render cycle
+            // This allows React to complete the unmount/cleanup of the previous component
+            const rafId = requestAnimationFrame(() => {
+                // Use another RAF to ensure cleanup is complete
+                requestAnimationFrame(() => {
+                    setGame(pendingGameRef.current!);
+                    setIsTransitioning(false);
+                    pendingGameRef.current = null;
+                });
+            });
+            return () => cancelAnimationFrame(rafId);
+        }
+    }, [gameKey, game]);
 
     if (game === 'menu') {
         return (
@@ -20,8 +56,9 @@ export default function Home() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <button
                             type="button"
-                            onClick={() => setGame('fishing')}
-                            className="group text-left rounded-3xl p-6 bg-white/15 backdrop-blur border border-white/25 hover:bg-white/20 transition"
+                            onClick={() => handleGameSelect('fishing')}
+                            disabled={isTransitioning}
+                            className="group text-left rounded-3xl p-6 bg-white/15 backdrop-blur border border-white/25 hover:bg-white/20 transition disabled:opacity-50"
                         >
                             <div className="text-4xl mb-3">🐠</div>
                             <div className="text-2xl font-bold text-white">Alphabet Fishing</div>
@@ -34,8 +71,9 @@ export default function Home() {
 
                         <button
                             type="button"
-                            onClick={() => setGame('train')}
-                            className="group text-left rounded-3xl p-6 bg-white/15 backdrop-blur border border-white/25 hover:bg-white/20 transition"
+                            onClick={() => handleGameSelect('train')}
+                            disabled={isTransitioning}
+                            className="group text-left rounded-3xl p-6 bg-white/15 backdrop-blur border border-white/25 hover:bg-white/20 transition disabled:opacity-50"
                         >
                             <div className="text-4xl mb-3">🚂</div>
                             <div className="text-2xl font-bold text-white">Alphabet Train</div>
@@ -57,10 +95,14 @@ export default function Home() {
 
     return (
         <>
-            {game === 'fishing' ? <FishingGame /> : <TrainGame />}
+            {game === 'fishing' ? (
+                <FishingGame key={`fishing-${gameKey}`} />
+            ) : (
+                <TrainGame key={`train-${gameKey}`} />
+            )}
             <button
                 type="button"
-                onClick={() => setGame('menu')}
+                onClick={handleBack}
                 className="fixed top-4 left-4 z-[400] px-4 py-2 rounded-full bg-black/40 text-white border border-white/20 backdrop-blur hover:bg-black/50 transition"
             >
                 ← Back

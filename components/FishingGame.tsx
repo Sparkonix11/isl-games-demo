@@ -14,6 +14,10 @@ import WebcamOverlay from '@/components/WebcamOverlay';
 import { useISLRecognition } from '@/hooks/useISLRecognition';
 import { WORDS, generateFishLetters, getRandomWord, type WordData } from '@/data/words';
 
+// Prediction thresholds for ISL recognition
+const PREDICTION_CONFIDENCE_THRESHOLD = 0.6;
+const HOLD_PROGRESS_THRESHOLD = 80;
+
 interface FishPosition {
   yPosition: number;
   swimDirection: number;
@@ -29,6 +33,9 @@ function generateFishPositions(count: number): FishPosition[] {
 }
 
 export default function FishingGame() {
+  // Unique key for webcam (changes on each mount)
+  const [webcamInstanceKey] = useState(() => `fishing-${Date.now()}-${Math.random()}`);
+  
   // Game state
   const [currentWord, setCurrentWord] = useState<WordData>(() => getRandomWord());
   const [fishLetters, setFishLetters] = useState<string[]>(() => generateFishLetters(currentWord.targetLetter, 7));
@@ -105,26 +112,42 @@ export default function FishingGame() {
   // Handle letter input (from ISL recognition)
   const handleLetterInput = useCallback(
     (letter: string) => {
-      if (isProcessing || showStartScreen) return;
+      if (showStartScreen) return;
 
-      // Check if letter matches any fish
-      const matchingFishIndex = fishLetters.findIndex((l) => l === letter);
+      const normalized = letter.trim().toUpperCase().slice(0, 1);
+      const isCorrectLetter = normalized === currentWord.targetLetter;
 
-      if (matchingFishIndex === -1) {
-        // Letter doesn't match any fish on screen
-        return;
+      // Allow processing correct answer even during processing (for new word)
+      if (isProcessing && !isCorrectLetter) return;
+
+      // For correct letters, always accept them (even if fish not visible)
+      // For wrong letters, only process if the fish is on screen
+      if (!isCorrectLetter) {
+        const matchingFishIndex = fishLetters.findIndex((l) => l === normalized);
+        if (matchingFishIndex === -1) {
+          // Wrong letter and fish not on screen - ignore
+          return;
+        }
       }
 
+      // Find matching fish index (for correct letter, find the target fish)
+      const matchingFishIndex = isCorrectLetter
+        ? fishLetters.findIndex((l) => l === currentWord.targetLetter)
+        : fishLetters.findIndex((l) => l === normalized);
+
+      // If correct letter but fish not found, use default position
+      const fishIndex = matchingFishIndex !== -1 ? matchingFishIndex : 0;
+
       const screenCenterX = window.innerWidth / 2;
-      const fishY = fishPositions[matchingFishIndex]?.yPosition || 50;
+      const fishY = fishPositions[fishIndex]?.yPosition || 50;
       const effectY = (fishY / 100) * window.innerHeight;
 
-      if (letter === currentWord.targetLetter) {
+      if (isCorrectLetter) {
         // Correct answer!
         setIsProcessing(true);
-        setJumpingLetter(letter);
+        setJumpingLetter(normalized);
 
-        const fishX = screenCenterX + (fishPositions[matchingFishIndex]?.swimDirection || 1) * 100;
+        const fishX = screenCenterX + (fishPositions[fishIndex]?.swimDirection || 1) * 100;
         setSparklePosition({ x: fishX, y: effectY });
         setShowSparkles(true);
 
@@ -145,7 +168,7 @@ export default function FishingGame() {
         setIsProcessing(true);
         playWrongSound();
         setShowWrongAnswer(true);
-        setWigglingLetter(letter);
+        setWigglingLetter(normalized);
         setBubblePosition({ x: screenCenterX, y: effectY });
         setShowBubbles(true);
 
@@ -161,10 +184,25 @@ export default function FishingGame() {
   );
 
   // ISL Recognition hook
-  const { prediction, holdProgress, isLoaded, webcamRef, canvasRef, initMediaPipe } = useISLRecognition({
+  const { prediction, holdProgress, isLoaded, webcamRef, canvasRef, initMediaPipe, onWebcamReady } = useISLRecognition({
     onLetterConfirmed: handleLetterInput,
-    enabled: !showStartScreen && !isProcessing,
+    enabled: !showStartScreen, // Always enabled when game is running, handleLetterInput will filter
   });
+
+  // Watch for correct predictions with high confidence to catch continuous detection
+  useEffect(() => {
+    if (!prediction || showStartScreen || isProcessing) return;
+
+    // Check if the predicted letter matches the target and has high confidence
+    const isCorrect = prediction.label === currentWord.targetLetter;
+    const hasHighConfidence = prediction.score > PREDICTION_CONFIDENCE_THRESHOLD;
+
+    // If correct letter detected with high confidence and hold progress is high, trigger success
+    // This catches the "green" state in the camera and ensures continuous detection
+    if (isCorrect && hasHighConfidence && holdProgress >= HOLD_PROGRESS_THRESHOLD) {
+      handleLetterInput(prediction.label);
+    }
+  }, [prediction, holdProgress, currentWord.targetLetter, showStartScreen, isProcessing, handleLetterInput]);
 
   // Ensure target letter fish is always present
   useEffect(() => {
@@ -232,6 +270,9 @@ export default function FishingGame() {
           holdProgress={holdProgress}
           targetLetter={currentWord.targetLetter}
           onScriptsLoad={initMediaPipe}
+          onWebcamReady={onWebcamReady}
+          showLoading={false}
+          webcamKey={webcamInstanceKey}
         />
       )}
     </div>
